@@ -61,7 +61,7 @@ int gpsfd;
 //////////////////////////////////////////////////
 
 // provide application router ID (8 bytes, LSBF)
-void os_getArtEui (u1_t* buf) {
+void os_getArtEi (u1_t* buf) {
     memcpy(buf, APPEUI, 8);
 }
 
@@ -111,11 +111,11 @@ static void getGPSData() {
 
   unsigned long start = millis();
 
-  fprint(stdout, "getGPSData");
+  fprintf(stdout, "getGPSData");
 
 //  do
 //  {
-    while (mySerial.available()) { gps.encode(mySerial.read()); }
+//    while (mySerial.available()) { gps.encode(mySerial.read()); }
 //  } while (millis() - start < 1000); CHANGE IMPLEMENTATION
 }
 
@@ -127,31 +127,29 @@ static void do_send(osjob_t* j){
     if (LMIC.opmode & (1 << 7)) {
       fprintf(stdout, "OP_TXRXPEND, not sending");
     } else {
-      uint8_t mydata[17];
+      int mydata[17];
       unsigned long int age, hdop, cnt;
       int year;
-      byte month, day, hour, minute, second, hundredths;
+      int month, day, hour, minute, second, hundredths;
 
-      union u_tag2 {
-          uint32_t i;
-          float val;
-      } flat,flon,falt,fcourse,fkmph;
+      float flat,flon,falt,fcourse,fkmph;
 
-      falt.val = 1000000.00;
+      falt = 1000000.00;
       cnt = 0;
-      while (( falt.val > 900000.00 ) and ( cnt < 30 )) {
-        Serial.print(cnt);
-        Serial.print(" ");
-        getGPSData();
-        gps.f_get_position(&flat.val, &flon.val, &age);
-        gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
-        hdop = gps.hdop();
-        falt.val = gps.f_altitude();
+      while (( falt > 900000.00 ) and ( cnt < 30 )) {
+        //fprintf(stdout,cnt);
+        fprintf(stdout," ");
+        //getGPSData();
+        //gps.f_get_position(&flat, &flon, &age);
+        //gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
+        //hdop = gps.hdop();
+        //falt = gps.f_altitude();
         delay(2000);
         cnt++;
       }
 
-      if (( falt.val < 900000.00 ) && ( falt.val > -1000.00 )) {
+      /*
+     if (( falt < 900000.00 ) && ( falt > -1000.00 )) {
         // pack date in an integer
 
         unsigned long int datetime = year - 2000;
@@ -160,20 +158,20 @@ static void do_send(osjob_t* j){
         datetime = (datetime * 100) + hour;
         datetime = (datetime * 100) + minute;
 
-        mydata[0] = flat.i >> 24;
-        mydata[1] = flat.i >> 16;
-        mydata[2] = flat.i >> 8;
-        mydata[3] = flat.i;
+        mydata[0] = flat >> 24;
+        mydata[1] = flat >> 16;
+        mydata[2] = flat >> 8;
+        mydata[3] = flat;
 
-        mydata[4] = flon.i >> 24;
-        mydata[5] = flon.i >> 16;
-        mydata[6] = flon.i >> 8;
-        mydata[7] = flon.i;
+        mydata[4] = flon >> 24;
+        mydata[5] = flon >> 16;
+        mydata[6] = flon >> 8;
+        mydata[7] = flon;
  
-        mydata[8] = falt.i >> 24;
-        mydata[9] = falt.i >> 16;
-        mydata[10] = falt.i >> 8;
-        mydata[11] = falt.i;
+        mydata[8] = falt >> 24;
+        mydata[9] = falt >> 16;
+        mydata[10] = falt >> 8;
+        mydata[11] = falt;
 
         mydata[12] = datetime >> 24;
         mydata[13] = datetime >> 16;
@@ -181,9 +179,10 @@ static void do_send(osjob_t* j){
         mydata[15] = datetime;
  
         mydata[16] = hdop;
+*/
         mydata[17]='\0';
         int myPort = 0;  // maybe should be 1
-        LMIC_setTxData2(myPort, mydata, sizeof(mydata), 0);
+        LMIC_setTxData2(myPort, mydata, sizeof(mydata));
       }
     }
     // Schedule a timed job to run at the given timestamp (absolute system time)
