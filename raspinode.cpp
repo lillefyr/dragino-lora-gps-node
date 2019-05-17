@@ -30,7 +30,7 @@
 #include <lmic.h>
 #include <hal.h>
 #include <local_hal.h>
-#include <GPS-GPS.h>
+#include <wiringSerial.h>
 
 // LoRaWAN Application identifier (AppEUI)
 // Not used in this example
@@ -51,6 +51,10 @@ static const u1_t APPSKEY[16] = { 0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6
 // LoRaWAN end-device address (DevAddr)
 // See http://thethingsnetwork.org/wiki/AddressSpace
 static const u4_t DEVADDR = 0xffffffff ; // <-- Change this address for every node!
+
+//
+//
+int gpsfd;
 
 //////////////////////////////////////////////////
 // APPLICATION CALLBACKS
@@ -239,6 +243,9 @@ void setup() {
     // Set data rate and transmit power (note: txpow seems to be ignored by the library)
     LMIC_setDrTxpow(DR_SF7,14);
 
+    // Get data from gps
+    gpsfd = serialOpen("/dev/ttyAMA0", 9600);
+
     // Start job
     do_send(&sendjob);
 }
@@ -248,11 +255,22 @@ void loop() {
 do_send(&sendjob);
 
 while(1) {
+
+  if  ( gpsfd == -1 ) {
+    // try to connect again
+    gpsfd = serialOpen("/dev/ttyAMA0", 9600);
+  }
+
+  if ( gpsfd > -1 ) {
+    // get the data
+    while (serialDataAvail( gpsfd ) {
+      fprintf(stdout, serialGetChar( gpsfd ));
+    }
+  }
   os_runloop();
 //  os_runloop_once();
   }
 }
-
 
 int main() {
   setup();

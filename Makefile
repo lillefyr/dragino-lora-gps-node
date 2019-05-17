@@ -1,9 +1,9 @@
 CFLAGS=-Ilmic
 LDFLAGS=-lwiringPi
 
-raspinode: raspinode-send-v1.cpp
+raspinode: raspinode.cpp
 	cd lmic && $(MAKE)
-	$(CC) $(CFLAGS) -o raspinode raspinode-send-v1.cpp lmic/*.o $(LDFLAGS)
+	$(CC) $(CFLAGS) -o raspinode raspinode.cpp lmic/*.o $(LDFLAGS)
 
 all: raspinode
 
