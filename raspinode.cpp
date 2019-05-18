@@ -11,7 +11,7 @@
  * will be processed by The Things Network server.
  *
  * Note: LoRaWAN per sub-band duty-cycle limitation is enforced (1% in g1, 
-*  0.1% in g2). 
+ *  0.1% in g2). 
  *
  * Change DEVADDR to a unique address! 
  * See http://thethingsnetwork.org/wiki/AddressSpace
@@ -54,14 +54,15 @@ static const u4_t DEVADDR = 0xffffffff ; // <-- Change this address for every no
 
 //
 //
-int gpsfd;
+int gpsfd = -1;
+FILE *logfd;
 
 //////////////////////////////////////////////////
 // APPLICATION CALLBACKS
 //////////////////////////////////////////////////
 
 // provide application router ID (8 bytes, LSBF)
-void os_getArtEi (u1_t* buf) {
+void os_getArtEui (u1_t* buf) {
     memcpy(buf, APPEUI, 8);
 }
 
@@ -106,17 +107,25 @@ void onEvent (ev_t ev) {
     }
 }
 
-// fake gps
 static void getGPSData() {
+    int aChar;
 
-  unsigned long start = millis();
+    if  ( gpsfd == -1 ) {
+        // try to connect again
+        gpsfd = serialOpen("/dev/ttyAMA0", 9600);
+    }
 
-  fprintf(stdout, "getGPSData");
-
-//  do
-//  {
-//    while (mySerial.available()) { gps.encode(mySerial.read()); }
-//  } while (millis() - start < 1000); CHANGE IMPLEMENTATION
+    if ( gpsfd > -1 ) {
+        logfd = fopen("/tmp/gps.log","a+");
+        // get the data
+        while (serialDataAvail( gpsfd )) {
+            aChar = (char)serialGetchar( gpsfd );
+            fprintf(stdout, "%c", aChar);
+            fprintf(logfd, "%c", aChar);
+        }
+        fflush(logfd);
+        fclose(logfd);
+    }
 }
 
 static void do_send(osjob_t* j){
@@ -136,10 +145,9 @@ static void do_send(osjob_t* j){
 
       falt = 1000000.00;
       cnt = 0;
-      while (( falt > 900000.00 ) and ( cnt < 30 )) {
-        //fprintf(stdout,cnt);
-        fprintf(stdout," ");
-        //getGPSData();
+      while (( falt > 900000.00 ) and ( cnt < 10 )) {
+        fprintf(stdout, "cnt=%d\n", cnt);
+        getGPSData();
         //gps.f_get_position(&flat, &flon, &age);
         //gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
         //hdop = gps.hdop();
@@ -182,31 +190,31 @@ static void do_send(osjob_t* j){
 */
         mydata[17]='\0';
         int myPort = 0;  // maybe should be 1
-        LMIC_setTxData2(myPort, (xref2u1_t) &mydata, sizeof(mydata), 1);
-      }
+        LMIC_setTxData2(myPort, (xref2u1_t) &mydata, sizeof(mydata), 1); 
     }
     // Schedule a timed job to run at the given timestamp (absolute system time)
-    os_setTimedCallback(j, os_getTime()+sec2osticks(20), do_send);
+    os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(20), do_send);
 }
 
 void gpsdump( float flat, float flon, float falt, float fcourse, float fkmph, unsigned long age, unsigned long datetime, unsigned long hdop )
 {
-  unsigned long chars;
-  int year;
-  byte month, day, hour, minute, second, hundredths;
-  unsigned short sentences, failed;
+    unsigned long chars;
+    int year;
+    unsigned short month, day, hour, minute, second, hundredths;
+    unsigned short sentences, failed;
 }
 
 void setup() {
-  // LMIC init
-  wiringPiSetup();
+    fprintf(stdout,"Start setup\n");
+    // LMIC init
+    wiringPiSetup();
 
-  os_init();
-  // Reset the MAC state. Session and pending data transfers will be discarded.
-  LMIC_reset();
-  // Set static session parameters. Instead of dynamically establishing a session 
-  // by joining the network, precomputed session parameters are be provided.
-  LMIC_setSession (0x1, DEVADDR, (u1_t*)NWKSKEY, (u1_t*)APPSKEY);
+    os_init();
+    // Reset the MAC state. Session and pending data transfers will be discarded.
+    LMIC_reset();
+    // Set static session parameters. Instead of dynamically establishing a session 
+    // by joining the network, precomputed session parameters are be provided.
+    LMIC_setSession (0x1, DEVADDR, (u1_t*)NWKSKEY, (u1_t*)APPSKEY);
 
 ////////////////////////////////////////////////////////////////////////////////
 // from original code
@@ -242,11 +250,10 @@ void setup() {
     // Set data rate and transmit power (note: txpow seems to be ignored by the library)
     LMIC_setDrTxpow(DR_SF7,14);
 
-    // Get data from gps
-    gpsfd = serialOpen("/dev/ttyAMA0", 9600);
-
+    fprintf(stdout,"Start send\n");
     // Start job
     do_send(&sendjob);
+    fprintf(stdout,"Done  setup\n");
 }
 
 void loop() {
@@ -255,17 +262,7 @@ do_send(&sendjob);
 
 while(1) {
 
-  if  ( gpsfd == -1 ) {
-    // try to connect again
-    gpsfd = serialOpen("/dev/ttyAMA0", 9600);
-  }
-
-  if ( gpsfd > -1 ) {
-    // get the data
-    while (serialDataAvail( gpsfd ) {
-      fprintf(stdout, serialGetChar( gpsfd ));
-    }
-  }
+  fprintf(stdout, "loop\n");
   os_runloop();
 //  os_runloop_once();
   }
