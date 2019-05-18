@@ -10,4 +10,5 @@ all: raspinode
 .PHONY: clean
 
 clean:
-	rm -f *.o raspinode
+	cd lmic && $(MAKE) clean
+	rm -f *.o raspinode log

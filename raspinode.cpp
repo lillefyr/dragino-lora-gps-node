@@ -127,7 +127,7 @@ static void do_send(osjob_t* j){
     if (LMIC.opmode & (1 << 7)) {
       fprintf(stdout, "OP_TXRXPEND, not sending");
     } else {
-      int mydata[17];
+      unsigned char mydata[17];
       unsigned long int age, hdop, cnt;
       int year;
       int month, day, hour, minute, second, hundredths;
@@ -182,7 +182,7 @@ static void do_send(osjob_t* j){
 */
         mydata[17]='\0';
         int myPort = 0;  // maybe should be 1
-        LMIC_setTxData2(myPort, mydata, sizeof(mydata));
+        LMIC_setTxData2(myPort, (xref2u1_t) &mydata, sizeof(mydata), 1);
       }
     }
     // Schedule a timed job to run at the given timestamp (absolute system time)
