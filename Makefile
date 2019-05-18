@@ -1,4 +1,4 @@
-CFLAGS=-Ilmic
+CFLAGS=-Ilmic -g
 LDFLAGS=-lwiringPi
 
 raspinode: raspinode.cpp

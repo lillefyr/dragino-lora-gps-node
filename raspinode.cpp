@@ -19,13 +19,14 @@
  * Pins set in lmic_pinmap
  *    For Dragino Lora & GPS shield for Raspberry PI
  *
- * Channel set in setup
+ * Only 1 channel in setup
  *    LMIC_setupChannel(0, 868100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
  *
  *******************************************************************************/
 
 #include <stdio.h>
 #include <time.h>
+#include <unistd.h>
 #include <wiringPi.h>
 #include <lmic.h>
 #include <hal.h>
@@ -46,6 +47,7 @@ lmic_pinmap pins = {
 
 // LoRaWAN configuration
 // See http://thethingsnetwork.org/wiki/AddressSpace
+
 #include "config.conf"
 
 //
@@ -74,46 +76,27 @@ void os_getDevKey (u1_t* buf) {
 
 static osjob_t sendjob;
 
-void onEvent (ev_t ev) {
-    //debug_event(ev);
-
-    switch(ev) {
-      // scheduled data sent (optionally data received)
-      // note: this includes the receive window!
-      case EV_TXCOMPLETE:
-          // use this event to keep track of actual transmissions
-          fprintf(stdout, "Event EV_TXCOMPLETE, time: %d\n", millis() / 1000);
-          if(LMIC.dataLen) { // data received in rx slot after tx
-              //debug_buf(LMIC.frame+LMIC.dataBeg, LMIC.dataLen);
-              fprintf(stdout, "Data Received!\n");
-          }
-          break;
-       default:
-          break;
-    }
-}
-
 static void gpsdump( float latitude, float longitude, float speed, float altitude, float course ) {
     logfd = fopen("/tmp/gps.log", "a+");
-
     fprintf(logfd, "%lf %lf %lf %lf %lf\n", latitude, longitude, speed, altitude, course);
     fflush(logfd);
     fclose(logfd);
+    fprintf(stdout, "%lf %lf %lf %lf %lf\n", latitude, longitude, speed, altitude, course);
 }
 
 static void do_send(osjob_t* j){
     time_t t=time(NULL);
     fprintf(stdout, "[%x] (%ld) %s\n", hal_ticks(), t, ctime(&t));
+
     // Show TX channel (channel numbers are local to LMIC)
     // Check if there is not a current TX/RX job running
     if (LMIC.opmode & (1 << 7)) {
-        fprintf(stdout, "OP_TXRXPEND, not sending");
+        fprintf(stdout, "OP_TXRXPEND, not finished, so not sending\n");
         return;
     }
     unsigned char mydata[18];
     unsigned long int age, hdop, cnt;
     int year, month, day, hour, minute, second, hundredths;
-
     float flat,flon,falt,fcourse,fspeed;
 
     falt = 1000000.00;
@@ -131,11 +114,11 @@ static void do_send(osjob_t* j){
 
         //gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
         //hdop = gps.hdop();
-        delay(2000);
+        sleep(2);
         cnt++;
     }
 
-    if (( falt < 900000.00 ) && ( falt > -1000.00 )) {
+    if (( falt < 900000.00 ) && ( falt > 0.00 )) {
         // pack date in an integer
         gpsdump( flat, flon, fspeed, falt, fcourse );
 
@@ -168,16 +151,37 @@ static void do_send(osjob_t* j){
         mydata[16] = hdop;
 
         mydata[17]='\0';
-        int myPort = 0;  // maybe should be 1
-        LMIC_setTxData2(myPort, (xref2u1_t) &mydata, sizeof(mydata), 1); 
+        fprintf(stdout, "Send gps data\n");
     }
-    // Schedule a timed job to run at the given timestamp (absolute system time)
-    os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(20), do_send);
+    // no payload if port 0 is defined
+    LMIC_setTxData2(1, (xref2u1_t) &mydata, sizeof(mydata), 0);
 }
 
-void setup() {
-    fprintf(stdout,"Start setup\n");
+void onEvent (ev_t ev) {
+    //debug_event(ev);
 
+    switch(ev) {
+        // scheduled data sent (optionally data received)
+        // note: this includes the receive window!
+        case EV_TXCOMPLETE:
+            // use this event to keep track of actual transmissions
+            fprintf(stdout, "Event EV_TXCOMPLETE, time: %d\n", millis() / 1000);
+            if(LMIC.dataLen) { // data received in rx slot after tx
+                //debug_buf(LMIC.frame+LMIC.dataBeg, LMIC.dataLen);
+                fprintf(stdout, "Data Received!\n");
+            }
+
+            // Schedule a timed job to run at the given timestamp (absolute system time)
+            // every 2 minutes
+            os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(120), do_send);
+            break;
+         default:
+            break;
+    }
+}
+
+
+void setup() {
     gps_init();
 
     // LMIC init
@@ -190,20 +194,15 @@ void setup() {
     // by joining the network, precomputed session parameters are be provided.
     LMIC_setSession (0x1, DEVADDR, (u1_t*)NWKSKEY, (u1_t*)APPSKEY);
 
-////////////////////////////////////////////////////////////////////////////////
-// from original code
-//  // Disable data rate adaptation
-//  LMIC_setAdrMode(0);
-//  
-//  // Disable beacon tracking
-//  LMIC_disableTracking ();
-//
-//  // Stop listening for downstream data (periodical reception)
-//  LMIC_stopPingable();
-//
-////////////////////////////////////////////////////////////////////////////////
-
     LMIC_setupChannel(0, 868100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
+    LMIC_disableChannel(1);
+    LMIC_disableChannel(2);
+    LMIC_disableChannel(3);
+    LMIC_disableChannel(4);
+    LMIC_disableChannel(5);
+    LMIC_disableChannel(6);
+    LMIC_disableChannel(7);
+    LMIC_disableChannel(8);
     //LMIC_setupChannel(1, 868300000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
     //LMIC_setupChannel(2, 868500000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
     //LMIC_setupChannel(3, 867100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
@@ -224,30 +223,24 @@ void setup() {
     // Set data rate and transmit power (note: txpow seems to be ignored by the library)
     LMIC_setDrTxpow(DR_SF7,14);
 
-    fprintf(stdout,"Start send\n");
-    // Start job
     do_send(&sendjob);
-    fprintf(stdout,"Done  setup\n");
 }
 
 void loop() {
+    do_send(&sendjob);
 
-do_send(&sendjob);
-
-while(1) {
-
-  fprintf(stdout, "loop\n");
-  os_runloop();
-//  os_runloop_once();
-  }
+    while(1) {
+        os_runloop();
+//        os_runloop_once();
+    }
 }
 
 int main() {
-  setup();
+    setup();
 
-  while (1) {
-    loop();
-  }
-  return 0;
+    while (1) {
+        loop();
+    }
+    return 0;
 }
 
