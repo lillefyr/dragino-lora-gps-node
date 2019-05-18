@@ -44,25 +44,9 @@ lmic_pinmap pins = {
   .dio = {7,4,5}
 };
 
-// LoRaWAN Application identifier (AppEUI)
-// Not used in this example
-static const u1_t APPEUI[8]  = { 0x02, 0x00, 0x00, 0x00, 0x00, 0xEE, 0xFF, 0xC0 };
-
-// LoRaWAN DevEUI, unique device ID (LSBF)
-// Not used in this example
-static const u1_t DEVEUI[8]  = { 0x42, 0x42, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF };
-
-// LoRaWAN NwkSKey, network session key 
-// Use this key for The Things Network
-static const u1_t NWKSKEY[16] = { 0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6, 0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C };
-
-// LoRaWAN AppSKey, application session key
-// Use this key to get your data decrypted by The Things Network
-static const u1_t APPSKEY[16] = { 0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6, 0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C };
-
-// LoRaWAN end-device address (DevAddr)
+// LoRaWAN configuration
 // See http://thethingsnetwork.org/wiki/AddressSpace
-static const u4_t DEVADDR = 0xffffffff ; // <-- Change this address for every node!
+#include "config.conf"
 
 //
 //
