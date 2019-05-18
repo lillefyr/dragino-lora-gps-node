@@ -16,11 +16,11 @@
  * Change DEVADDR to a unique address! 
  * See http://thethingsnetwork.org/wiki/AddressSpace
  *
- * Do not forget to define the radio type correctly in config.h, default is:
- *   #define CFG_sx1272_radio 1
- * for SX1272 and RFM92, but change to:
- *   #define CFG_sx1276_radio 1
- * for SX1276 and RFM95.
+ * Pins set in lmic_pinmap
+ *    For Dragino Lora & GPS shield for Raspberry PI
+ *
+ * Channel set in setup
+ *    LMIC_setupChannel(0, 868100000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
  *
  *******************************************************************************/
 
@@ -31,6 +31,18 @@
 #include <hal.h>
 #include <local_hal.h>
 #include <wiringSerial.h>
+extern "C" 
+{
+#include <gps.h>
+}
+
+// Pin mapping
+lmic_pinmap pins = {
+  .nss = 6,
+  .rxtx = UNUSED_PIN, // Not connected on RFM92/RFM95
+  .rst = 0,  // Needed on RFM92/RFM95
+  .dio = {7,4,5}
+};
 
 // LoRaWAN Application identifier (AppEUI)
 // Not used in this example
@@ -54,8 +66,8 @@ static const u4_t DEVADDR = 0xffffffff ; // <-- Change this address for every no
 
 //
 //
-int gpsfd = -1;
 FILE *logfd;
+loc_t gpsdata;
 
 //////////////////////////////////////////////////
 // APPLICATION CALLBACKS
@@ -76,17 +88,7 @@ void os_getDevKey (u1_t* buf) {
     memcpy(buf, NWKSKEY, 16);
 }
 
-u4_t cntr=0;
-u1_t mydata[] = {"Hello, world!                               "};
 static osjob_t sendjob;
-
-// Pin mapping
-lmic_pinmap pins = {
-  .nss = 6,
-  .rxtx = UNUSED_PIN, // Not connected on RFM92/RFM95
-  .rst = 0,  // Needed on RFM92/RFM95
-  .dio = {7,4,5}
-};
 
 void onEvent (ev_t ev) {
     //debug_event(ev);
@@ -107,58 +109,51 @@ void onEvent (ev_t ev) {
     }
 }
 
-static void getGPSData() {
-    int aChar;
+static void gpsdump( float latitude, float longitude, float speed, float altitude, float course ) {
+    logfd = fopen("/tmp/gps.log", "a+");
 
-    if  ( gpsfd == -1 ) {
-        // try to connect again
-        gpsfd = serialOpen("/dev/ttyAMA0", 9600);
-    }
-
-    if ( gpsfd > -1 ) {
-        logfd = fopen("/tmp/gps.log","a+");
-        // get the data
-        while (serialDataAvail( gpsfd )) {
-            aChar = (char)serialGetchar( gpsfd );
-            fprintf(stdout, "%c", aChar);
-            fprintf(logfd, "%c", aChar);
-        }
-        fflush(logfd);
-        fclose(logfd);
-    }
+    fprintf(logfd, "%lf %lf %lf %lf %lf\n", latitude, longitude, speed, altitude, course);
+    fflush(logfd);
+    fclose(logfd);
 }
 
 static void do_send(osjob_t* j){
-      time_t t=time(NULL);
-      fprintf(stdout, "[%x] (%ld) %s\n", hal_ticks(), t, ctime(&t));
-      // Show TX channel (channel numbers are local to LMIC)
-      // Check if there is not a current TX/RX job running
+    time_t t=time(NULL);
+    fprintf(stdout, "[%x] (%ld) %s\n", hal_ticks(), t, ctime(&t));
+    // Show TX channel (channel numbers are local to LMIC)
+    // Check if there is not a current TX/RX job running
     if (LMIC.opmode & (1 << 7)) {
-      fprintf(stdout, "OP_TXRXPEND, not sending");
-    } else {
-      unsigned char mydata[17];
-      unsigned long int age, hdop, cnt;
-      int year;
-      int month, day, hour, minute, second, hundredths;
+        fprintf(stdout, "OP_TXRXPEND, not sending");
+        return;
+    }
+    unsigned char mydata[18];
+    unsigned long int age, hdop, cnt;
+    int year, month, day, hour, minute, second, hundredths;
 
-      float flat,flon,falt,fcourse,fkmph;
+    float flat,flon,falt,fcourse,fspeed;
 
-      falt = 1000000.00;
-      cnt = 0;
-      while (( falt > 900000.00 ) and ( cnt < 10 )) {
+    falt = 1000000.00;
+    cnt = 0;
+    while (( falt > 900000.00 ) and ( cnt < 10 )) {
         fprintf(stdout, "cnt=%d\n", cnt);
-        getGPSData();
-        //gps.f_get_position(&flat, &flon, &age);
+        // get GPS data
+        gps_location(&gpsdata);
+
+        flat = gpsdata.latitude;
+        flon = gpsdata.longitude;
+        fspeed = gpsdata.speed;
+        falt = gpsdata.altitude;
+        fcourse = gpsdata.course;
+
         //gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
         //hdop = gps.hdop();
-        //falt = gps.f_altitude();
         delay(2000);
         cnt++;
-      }
+    }
 
-      /*
-     if (( falt < 900000.00 ) && ( falt > -1000.00 )) {
+    if (( falt < 900000.00 ) && ( falt > -1000.00 )) {
         // pack date in an integer
+        gpsdump( flat, flon, fspeed, falt, fcourse );
 
         unsigned long int datetime = year - 2000;
         datetime = (datetime * 100) + month;
@@ -166,20 +161,20 @@ static void do_send(osjob_t* j){
         datetime = (datetime * 100) + hour;
         datetime = (datetime * 100) + minute;
 
-        mydata[0] = flat >> 24;
-        mydata[1] = flat >> 16;
-        mydata[2] = flat >> 8;
-        mydata[3] = flat;
+        mydata[0] = (int)flat >> 24;
+        mydata[1] = (int)flat >> 16;
+        mydata[2] = (int)flat >> 8;
+        mydata[3] = (int)flat;
 
-        mydata[4] = flon >> 24;
-        mydata[5] = flon >> 16;
-        mydata[6] = flon >> 8;
-        mydata[7] = flon;
+        mydata[4] = (int)flon >> 24;
+        mydata[5] = (int)flon >> 16;
+        mydata[6] = (int)flon >> 8;
+        mydata[7] = (int)flon;
  
-        mydata[8] = falt >> 24;
-        mydata[9] = falt >> 16;
-        mydata[10] = falt >> 8;
-        mydata[11] = falt;
+        mydata[8] = (int)falt >> 24;
+        mydata[9] = (int)falt >> 16;
+        mydata[10] = (int)falt >> 8;
+        mydata[11] = (int)falt;
 
         mydata[12] = datetime >> 24;
         mydata[13] = datetime >> 16;
@@ -187,7 +182,7 @@ static void do_send(osjob_t* j){
         mydata[15] = datetime;
  
         mydata[16] = hdop;
-*/
+
         mydata[17]='\0';
         int myPort = 0;  // maybe should be 1
         LMIC_setTxData2(myPort, (xref2u1_t) &mydata, sizeof(mydata), 1); 
@@ -196,16 +191,11 @@ static void do_send(osjob_t* j){
     os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(20), do_send);
 }
 
-void gpsdump( float flat, float flon, float falt, float fcourse, float fkmph, unsigned long age, unsigned long datetime, unsigned long hdop )
-{
-    unsigned long chars;
-    int year;
-    unsigned short month, day, hour, minute, second, hundredths;
-    unsigned short sentences, failed;
-}
-
 void setup() {
     fprintf(stdout,"Start setup\n");
+
+    gps_init();
+
     // LMIC init
     wiringPiSetup();
 

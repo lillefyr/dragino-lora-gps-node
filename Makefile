@@ -3,7 +3,7 @@ LDFLAGS=-lwiringPi
 
 raspinode: raspinode.cpp
 	cd lmic && $(MAKE)
-	$(CC) $(CFLAGS) -o raspinode raspinode.cpp lmic/*.o $(LDFLAGS)
+	$(CC) $(CFLAGS) -o raspinode raspinode.cpp lmic/*.o $(LDFLAGS) -lgps -lm
 
 all: raspinode
 
