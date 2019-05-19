@@ -1,7 +1,7 @@
 CFLAGS=-Ilmic -g
 LDFLAGS=-lwiringPi
 
-raspinode: raspinode.cpp
+raspinode: raspinode.cpp config.conf
 	cd lmic && $(MAKE)
 	$(CC) $(CFLAGS) -o raspinode raspinode.cpp lmic/*.o $(LDFLAGS) -lgps -lm
 

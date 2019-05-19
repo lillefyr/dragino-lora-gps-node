@@ -55,6 +55,40 @@ lmic_pinmap pins = {
 FILE *logfd;
 loc_t gpsdata;
 
+//
+// Unions needed for message construction
+
+union u_latitude {
+    float         flat;
+    unsigned char clat[4];
+};
+
+union u_longitude {
+    float         flon;
+    unsigned char clon[4];
+};
+
+union u_speed {
+    float         fspeed;
+    unsigned char cspeed[4];
+};
+
+union u_altitude {
+    float         falt;
+    unsigned char calt[4];
+};
+
+union u_course  {
+    float         fcourse;
+    unsigned char ccourse[4];
+};
+
+union u_datetime {
+    unsigned long int idatetime;
+    unsigned char cdatetime[8];
+};
+
+
 //////////////////////////////////////////////////
 // APPLICATION CALLBACKS
 //////////////////////////////////////////////////
@@ -85,6 +119,8 @@ static void gpsdump( float latitude, float longitude, float speed, float altitud
 }
 
 static void do_send(osjob_t* j){
+
+    fprintf(stdout,"do_send\n");
     time_t t=time(NULL);
     fprintf(stdout, "[%x] (%ld) %s\n", hal_ticks(), t, ctime(&t));
 
@@ -94,66 +130,93 @@ static void do_send(osjob_t* j){
         fprintf(stdout, "OP_TXRXPEND, not finished, so not sending\n");
         return;
     }
-    unsigned char mydata[18];
+    char mydata[18];
     unsigned long int age, hdop, cnt;
     int year, month, day, hour, minute, second, hundredths;
-    float flat,flon,falt,fcourse,fspeed;
+    u_latitude lat;
+    u_longitude lon;
+    u_altitude alt;
+    u_course course;
+    u_speed speed;
+    u_datetime datetime;
 
-    falt = 1000000.00;
+    alt.falt = 1000000.00;
     cnt = 0;
-    while (( falt > 900000.00 ) and ( cnt < 10 )) {
+    while (( alt.falt > 900000.00 ) and ( cnt < 10 )) {
         fprintf(stdout, "cnt=%d\n", cnt);
         // get GPS data
         gps_location(&gpsdata);
+        fprintf(stdout, "got data\n");
 
-        flat = gpsdata.latitude;
-        flon = gpsdata.longitude;
-        fspeed = gpsdata.speed;
-        falt = gpsdata.altitude;
-        fcourse = gpsdata.course;
+        lat.flat = gpsdata.latitude;
+        lon.flon = gpsdata.longitude;
+        speed.fspeed = gpsdata.speed;
+        alt.falt = gpsdata.altitude;
+        course.fcourse = gpsdata.course;
 
         //gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
         //hdop = gps.hdop();
-        sleep(2);
+
+        year = 2019;
+        month = 5;
+        day = 19;
+        hour = 16;
+        minute = 0;
+        hdop = 0; //gps.hdop();
+        sleep(cnt);
         cnt++;
     }
 
-    if (( falt < 900000.00 ) && ( falt > 0.00 )) {
+    if (( alt.falt < 900000.00 ) && ( alt.falt > 0.00 )) {
         // pack date in an integer
-        gpsdump( flat, flon, fspeed, falt, fcourse );
+        gpsdump( lat.flat, lon.flon, speed.fspeed, alt.falt, course.fcourse );
 
-        unsigned long int datetime = year - 2000;
-        datetime = (datetime * 100) + month;
-        datetime = (datetime * 100) + day;
-        datetime = (datetime * 100) + hour;
-        datetime = (datetime * 100) + minute;
+        datetime.idatetime = year - 2000;
+        datetime.idatetime = (datetime.idatetime * 100) + month;
+        datetime.idatetime = (datetime.idatetime * 100) + day;
+        datetime.idatetime = (datetime.idatetime * 100) + hour;
+        datetime.idatetime = (datetime.idatetime * 100) + minute;
 
-        mydata[0] = (int)flat >> 24;
-        mydata[1] = (int)flat >> 16;
-        mydata[2] = (int)flat >> 8;
-        mydata[3] = (int)flat;
+        lat.flat = 10.000000;
+        lon.flon = 0.000001;
+        alt.falt = 5.555555;
 
-        mydata[4] = (int)flon >> 24;
-        mydata[5] = (int)flon >> 16;
-        mydata[6] = (int)flon >> 8;
-        mydata[7] = (int)flon;
+        mydata[0] = lat.clat[0];
+        mydata[1] = lat.clat[1];
+        mydata[2] = lat.clat[2];
+        mydata[3] = lat.clat[3];
+
+        mydata[4] = lon.clon[0];
+        mydata[5] = lon.clon[1];
+        mydata[6] = lon.clon[2];
+        mydata[7] = lon.clon[3];
  
-        mydata[8] = (int)falt >> 24;
-        mydata[9] = (int)falt >> 16;
-        mydata[10] = (int)falt >> 8;
-        mydata[11] = (int)falt;
+        mydata[8] = alt.calt[0];
+        mydata[9] = alt.calt[1];
+        mydata[10] = alt.calt[2];
+        mydata[11] = alt.calt[3];
 
-        mydata[12] = datetime >> 24;
-        mydata[13] = datetime >> 16;
-        mydata[14] = datetime >> 8;
-        mydata[15] = datetime;
+        mydata[12] = datetime.cdatetime[0];
+        mydata[13] = datetime.cdatetime[1];
+        mydata[14] = datetime.cdatetime[2];
+        mydata[15] = datetime.cdatetime[3];
  
         mydata[16] = hdop;
+
 
         mydata[17]='\0';
         fprintf(stdout, "Send gps data\n");
     }
+    else
+    {
+        fprintf(stdout, "No gps data\n");
+    }
+    for (int i = 0; i< 17; i++ ){
+        mydata[i] = i;
+    }
+
     // no payload if port 0 is defined
+    fprintf(stdout,"LMIC_setTxData2 %s\n", (char*)&mydata);
     LMIC_setTxData2(1, (xref2u1_t) &mydata, sizeof(mydata), 0);
 }
 
@@ -173,7 +236,7 @@ void onEvent (ev_t ev) {
 
             // Schedule a timed job to run at the given timestamp (absolute system time)
             // every 2 minutes
-            os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(120), do_send);
+            os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(30), do_send);
             break;
          default:
             break;
@@ -222,12 +285,11 @@ void setup() {
 
     // Set data rate and transmit power (note: txpow seems to be ignored by the library)
     LMIC_setDrTxpow(DR_SF7,14);
-
-    do_send(&sendjob);
 }
 
 void loop() {
     do_send(&sendjob);
+    sleep(2); // wait for first message to go
 
     while(1) {
         os_runloop();
