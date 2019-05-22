@@ -35,6 +35,7 @@
 extern "C" 
 {
 #include <gps.h>
+#include <nmea.h>
 }
 
 // Pin mapping
@@ -53,7 +54,9 @@ lmic_pinmap pins = {
 //
 //
 FILE *logfd;
-loc_t gpsdata;
+loc_t location;
+datetime_t gpsdatetime;
+satellitedata_t satellitedata;
 
 //
 // Unions needed for message construction
@@ -87,7 +90,6 @@ union u_datetime {
     unsigned long int idatetime;
     unsigned char cdatetime[8];
 };
-
 
 //////////////////////////////////////////////////
 // APPLICATION CALLBACKS
@@ -140,83 +142,65 @@ static void do_send(osjob_t* j){
     u_speed speed;
     u_datetime datetime;
 
-    alt.falt = 1000000.00;
-    cnt = 0;
-    while (( alt.falt > 900000.00 ) and ( cnt < 10 )) {
-        fprintf(stdout, "cnt=%d\n", cnt);
-        // get GPS data
-        gps_location(&gpsdata);
-        fprintf(stdout, "got data\n");
+    // get GPS data
+    fprintf(stdout,"get gps data\n");
+    gps_data();
 
-        lat.flat = gpsdata.latitude;
-        lon.flon = gpsdata.longitude;
-        speed.fspeed = gpsdata.speed;
-        alt.falt = gpsdata.altitude;
-        course.fcourse = gpsdata.course;
+    fprintf(stdout, "gps_location\n");
+    gps_location(&location);
 
-        //gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
-        //hdop = gps.hdop();
+    fprintf(stdout, "gps_datetime\n");
+    gps_datetime(&gpsdatetime);
 
-        year = 2019;
-        month = 5;
-        day = 19;
-        hour = 16;
-        minute = 0;
-        hdop = 0; //gps.hdop();
-        sleep(cnt);
-        cnt++;
+    fprintf(stdout, "gps_gpgsa\n");
+    gps_gpgsa(&satellitedata);
+
+    gpsdump( lat.flat, lon.flon, speed.fspeed, alt.falt, course.fcourse );
+
+    // pack latitude
+    lat.flat = location.latitude;
+    mydata[0] = lat.clat[3];
+    mydata[1] = lat.clat[2];
+    mydata[2] = lat.clat[1];
+    mydata[3] = lat.clat[0];
+
+    // pack longitude
+    lon.flon = location.longitude;
+    mydata[4] = lon.clon[3];
+    mydata[5] = lon.clon[2];
+    mydata[6] = lon.clon[1];
+    mydata[7] = lon.clon[0];
+
+    // pack altitude 
+    alt.falt = location.altitude;
+    mydata[8] = alt.calt[3];
+    mydata[9] = alt.calt[2];
+    mydata[10] = alt.calt[1];
+    mydata[11] = alt.calt[0];
+
+    // calculate and pack datetime
+    datetime.idatetime = year; year = gpsdatetime.year;
+    datetime.idatetime = (datetime.idatetime * 100) + gpsdatetime.month;
+    datetime.idatetime = (datetime.idatetime * 100) + gpsdatetime.day;
+    datetime.idatetime = (datetime.idatetime * 100) + gpsdatetime.hour;
+    datetime.idatetime = (datetime.idatetime * 100) + gpsdatetime.minute;
+    mydata[12] = datetime.cdatetime[3];
+    mydata[13] = datetime.cdatetime[2];
+    mydata[14] = datetime.cdatetime[1];
+    mydata[15] = datetime.cdatetime[0];
+
+    // get HDOP 
+    mydata[16] = satellitedata.HDOP;
+
+    mydata[17]='\0';
+    fprintf(stdout, "Send gps data\n");
+
+    for (int i=0; i<17; i++) {
+        fprintf(stdout, "%02x ", mydata[i]);
     }
-
-    if (( alt.falt < 900000.00 ) && ( alt.falt > 0.00 )) {
-        // pack date in an integer
-        gpsdump( lat.flat, lon.flon, speed.fspeed, alt.falt, course.fcourse );
-
-        datetime.idatetime = year - 2000;
-        datetime.idatetime = (datetime.idatetime * 100) + month;
-        datetime.idatetime = (datetime.idatetime * 100) + day;
-        datetime.idatetime = (datetime.idatetime * 100) + hour;
-        datetime.idatetime = (datetime.idatetime * 100) + minute;
-
-        lat.flat = 10.000000;
-        lon.flon = 0.000001;
-        alt.falt = 5.555555;
-
-        mydata[0] = lat.clat[0];
-        mydata[1] = lat.clat[1];
-        mydata[2] = lat.clat[2];
-        mydata[3] = lat.clat[3];
-
-        mydata[4] = lon.clon[0];
-        mydata[5] = lon.clon[1];
-        mydata[6] = lon.clon[2];
-        mydata[7] = lon.clon[3];
- 
-        mydata[8] = alt.calt[0];
-        mydata[9] = alt.calt[1];
-        mydata[10] = alt.calt[2];
-        mydata[11] = alt.calt[3];
-
-        mydata[12] = datetime.cdatetime[0];
-        mydata[13] = datetime.cdatetime[1];
-        mydata[14] = datetime.cdatetime[2];
-        mydata[15] = datetime.cdatetime[3];
- 
-        mydata[16] = hdop;
-
-
-        mydata[17]='\0';
-        fprintf(stdout, "Send gps data\n");
-    }
-    else
-    {
-        fprintf(stdout, "No gps data\n");
-    }
-    for (int i = 0; i< 17; i++ ){
-        mydata[i] = i;
-    }
+    fprintf(stdout, "\n");
 
     // no payload if port 0 is defined
-    fprintf(stdout,"LMIC_setTxData2 %s\n", (char*)&mydata);
     LMIC_setTxData2(1, (xref2u1_t) &mydata, sizeof(mydata), 0);
 }
 
@@ -245,6 +229,7 @@ void onEvent (ev_t ev) {
 
 
 void setup() {
+    fprintf(stdout, "gps_init\n");
     gps_init();
 
     // LMIC init
@@ -293,7 +278,6 @@ void loop() {
 
     while(1) {
         os_runloop();
-//        os_runloop_once();
     }
 }
 
