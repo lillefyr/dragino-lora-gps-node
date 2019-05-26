@@ -132,7 +132,7 @@ static void do_send(osjob_t* j){
         fprintf(stdout, "OP_TXRXPEND, not finished, so not sending\n");
         return;
     }
-    char mydata[18];
+    char mydata[18], locSet, timeSet, hdopSet;
     unsigned long int age, hdop, cnt;
     int year, month, day, hour, minute, second, hundredths;
     u_latitude lat;
@@ -143,17 +143,23 @@ static void do_send(osjob_t* j){
     u_datetime datetime;
 
     // get GPS data
+
     fprintf(stdout,"get gps data\n");
-    gps_data();
+    while (( locSet != 'Y' ) || ( timeSet != 'Y' ) || ( hdopSet != 'Y' )) {
+        gps_data();
 
-    fprintf(stdout, "gps_location\n");
-    gps_location(&location);
+        fprintf(stdout, "gps_location\n");
+        locSet = gps_location(&location);
 
-    fprintf(stdout, "gps_datetime\n");
-    gps_datetime(&gpsdatetime);
+        fprintf(stdout, "gps_datetime\n");
+        timeSet = gps_datetime(&gpsdatetime);
 
-    fprintf(stdout, "gps_gpgsa\n");
-    gps_gpgsa(&satellitedata);
+        fprintf(stdout, "gps_gpgsa\n");
+        hdopSet = gps_gpgsa(&satellitedata);
+    }
+    locSet = 'N';
+    timeSet = 'N';
+    hdopSet = 'N';
 
     gpsdump( lat.flat, lon.flon, speed.fspeed, alt.falt, course.fcourse );
 
@@ -179,11 +185,13 @@ static void do_send(osjob_t* j){
     mydata[11] = alt.calt[0];
 
     // calculate and pack datetime
-    datetime.idatetime = year; year = gpsdatetime.year;
+
+    datetime.idatetime = gpsdatetime.year;
     datetime.idatetime = (datetime.idatetime * 100) + gpsdatetime.month;
     datetime.idatetime = (datetime.idatetime * 100) + gpsdatetime.day;
     datetime.idatetime = (datetime.idatetime * 100) + gpsdatetime.hour;
     datetime.idatetime = (datetime.idatetime * 100) + gpsdatetime.minute;
+
     mydata[12] = datetime.cdatetime[3];
     mydata[13] = datetime.cdatetime[2];
     mydata[14] = datetime.cdatetime[1];
@@ -202,6 +210,7 @@ static void do_send(osjob_t* j){
 
     // no payload if port 0 is defined
     LMIC_setTxData2(1, (xref2u1_t) &mydata, sizeof(mydata), 0);
+
 }
 
 void onEvent (ev_t ev) {
@@ -221,6 +230,8 @@ void onEvent (ev_t ev) {
             // Schedule a timed job to run at the given timestamp (absolute system time)
             // every 2 minutes
             os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(30), do_send);
+
+            fprintf(stdout, "start wait\n");
             break;
          default:
             break;
