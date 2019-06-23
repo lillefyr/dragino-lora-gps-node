@@ -148,20 +148,18 @@ static void do_send(osjob_t* j){
     while (( locSet != 'Y' ) || ( timeSet != 'Y' ) || ( hdopSet != 'Y' )) {
         gps_data();
 
-        fprintf(stdout, "gps_location\n");
+        //fprintf(stdout, "gps_location\n");
         locSet = gps_location(&location);
 
-        fprintf(stdout, "gps_datetime\n");
+        //fprintf(stdout, "gps_datetime\n");
         timeSet = gps_datetime(&gpsdatetime);
 
-        fprintf(stdout, "gps_gpgsa\n");
+        //fprintf(stdout, "gps_gpgsa\n");
         hdopSet = gps_gpgsa(&satellitedata);
     }
     locSet = 'N';
     timeSet = 'N';
     hdopSet = 'N';
-
-    gpsdump( lat.flat, lon.flon, speed.fspeed, alt.falt, course.fcourse );
 
     // pack latitude
     lat.flat = location.latitude;
@@ -200,7 +198,7 @@ static void do_send(osjob_t* j){
     // get HDOP 
     mydata[16] = satellitedata.HDOP;
 
-    mydata[17]='\0';
+//    mydata[17]='\0';
     fprintf(stdout, "Send gps data\n");
 
     for (int i=0; i<17; i++) {
@@ -228,8 +226,8 @@ void onEvent (ev_t ev) {
             }
 
             // Schedule a timed job to run at the given timestamp (absolute system time)
-            // every 2 minutes
-            os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(30), do_send);
+            // every 30 minutes 1800 sec
+            os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(1800), do_send);
 
             fprintf(stdout, "start wait\n");
             break;
