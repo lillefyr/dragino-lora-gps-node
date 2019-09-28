@@ -240,6 +240,7 @@ void onEvent (ev_t ev) {
 void setup() {
     fprintf(stdout, "gps_init\n");
     gps_init();
+    sleep(10);
 
     // LMIC init
     wiringPiSetup();
